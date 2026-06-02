@@ -12,6 +12,7 @@ import {
 	createGrepTool,
 	createLsTool,
 	createReadTool,
+	createSwarmDispatchTool,
 	createWriteTool,
 } from "../src/index.ts";
 import * as shellModule from "../src/utils/shell.ts";
@@ -23,6 +24,7 @@ const bashTool = createBashTool(process.cwd());
 const grepTool = createGrepTool(process.cwd());
 const findTool = createFindTool(process.cwd());
 const lsTool = createLsTool(process.cwd());
+const swarmDispatchTool = createSwarmDispatchTool(process.cwd());
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {
@@ -802,6 +804,28 @@ describe("Coding Agent Tools", () => {
 
 			expect(output).toContain(".hidden-file");
 			expect(output).toContain(".hidden-dir/");
+		});
+	});
+
+	describe("swarm_dispatch tool", () => {
+		it("rejects requests with more than 10 tasks", async () => {
+			const tasks = Array.from({ length: 11 }, (_, i) => `subtask ${i + 1}`);
+			const result = await swarmDispatchTool.execute("test-call-swarm-limit", { tasks });
+			expect(result.isError).toBe(true);
+			expect(getTextOutput(result)).toContain("Too many subtasks (11). Max is 10.");
+		});
+
+		it("prepares legacy object task arguments", () => {
+			const prepared = swarmDispatchTool.prepareArguments?.({
+				tasks: [{ task: "first" }, { task: "second" }, { nope: true }],
+				model: "test-model",
+				concurrency: 2,
+			});
+			expect(prepared).toEqual({
+				tasks: ["first", "second"],
+				model: "test-model",
+				concurrency: 2,
+			});
 		});
 	});
 });

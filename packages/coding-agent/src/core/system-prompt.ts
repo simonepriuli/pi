@@ -50,41 +50,6 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	const contextFiles = providedContextFiles ?? [];
 	const skills = providedSkills ?? [];
 
-	if (customPrompt) {
-		let prompt = customPrompt;
-
-		if (appendSection) {
-			prompt += appendSection;
-		}
-
-		// Append project context files
-		if (contextFiles.length > 0) {
-			prompt += "\n\n<project_context>\n\n";
-			prompt += "Project-specific instructions and guidelines:\n\n";
-			for (const { path: filePath, content } of contextFiles) {
-				prompt += `<project_instructions path="${filePath}">\n${content}\n</project_instructions>\n\n`;
-			}
-			prompt += "</project_context>\n";
-		}
-
-		// Append skills section (only if read tool is available)
-		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
-		if (customPromptHasRead && skills.length > 0) {
-			prompt += formatSkillsForPrompt(skills);
-		}
-
-		// Add date and working directory last
-		prompt += `\nCurrent date: ${date}`;
-		prompt += `\nCurrent working directory: ${promptCwd}`;
-
-		return prompt;
-	}
-
-	// Get absolute paths to documentation and examples
-	const readmePath = getReadmePath();
-	const docsPath = getDocsPath();
-	const examplesPath = getExamplesPath();
-
 	// Build tools list based on selected tools.
 	// A tool appears in Available tools only when the caller provides a one-line snippet.
 	const tools = selectedTools || ["read", "bash", "edit", "write"];
@@ -126,6 +91,42 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	addGuideline("Show file paths clearly when working with files");
 
 	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
+
+	if (customPrompt) {
+		let prompt = customPrompt;
+
+		prompt += `\n\nAvailable tools:\n${toolsList}\n\nGuidelines:\n${guidelines}`;
+
+		if (appendSection) {
+			prompt += appendSection;
+		}
+
+		// Append project context files
+		if (contextFiles.length > 0) {
+			prompt += "\n\n<project_context>\n\n";
+			prompt += "Project-specific instructions and guidelines:\n\n";
+			for (const { path: filePath, content } of contextFiles) {
+				prompt += `<project_instructions path="${filePath}">\n${content}\n</project_instructions>\n\n`;
+			}
+			prompt += "</project_context>\n";
+		}
+
+		// Append skills section (only if read tool is available)
+		if (hasRead && skills.length > 0) {
+			prompt += formatSkillsForPrompt(skills);
+		}
+
+		// Add date and working directory last
+		prompt += `\nCurrent date: ${date}`;
+		prompt += `\nCurrent working directory: ${promptCwd}`;
+
+		return prompt;
+	}
+
+	// Get absolute paths to documentation and examples
+	const readmePath = getReadmePath();
+	const docsPath = getDocsPath();
+	const examplesPath = getExamplesPath();
 
 	let prompt = `You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.
 

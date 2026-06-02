@@ -83,6 +83,7 @@ describe("ExtensionRunner", () => {
 		getContextUsage: () => undefined,
 		compact: () => {},
 		getSystemPrompt: () => "",
+		getSwarmMode: () => false,
 	};
 
 	describe("shortcut conflicts", () => {

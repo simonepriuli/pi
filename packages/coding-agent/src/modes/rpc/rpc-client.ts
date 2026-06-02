@@ -272,6 +272,13 @@ export class RpcClient {
 	}
 
 	/**
+	 * Toggle Swarm mode (enables/disables swarm_dispatch tool).
+	 */
+	async setSwarmMode(enabled: boolean): Promise<void> {
+		await this.send({ type: "set_swarm_mode", enabled });
+	}
+
+	/**
 	 * Cycle thinking level.
 	 */
 	async cycleThinkingLevel(): Promise<{ level: ThinkingLevel } | null> {

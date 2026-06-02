@@ -328,6 +328,8 @@ export interface ExtensionContext {
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+	/** Whether Swarm mode is enabled for this session. */
+	getSwarmMode(): boolean;
 }
 
 /**
@@ -1506,6 +1508,7 @@ export interface ExtensionContextActions {
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
+	getSwarmMode: () => boolean;
 }
 
 /**

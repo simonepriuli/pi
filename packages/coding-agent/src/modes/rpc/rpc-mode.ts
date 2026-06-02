@@ -443,6 +443,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				const state: RpcSessionState = {
 					model: session.model,
 					thinkingLevel: session.thinkingLevel,
+					swarmMode: session.swarmMode,
 					isStreaming: session.isStreaming,
 					isCompacting: session.isCompacting,
 					steeringMode: session.steeringMode,
@@ -491,6 +492,16 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			case "set_thinking_level": {
 				session.setThinkingLevel(command.level);
 				return success(id, "set_thinking_level");
+			}
+
+			case "set_swarm_mode": {
+				session.setSwarmMode(command.enabled);
+				return success(id, "set_swarm_mode");
+			}
+
+			case "set_swarn_mode": {
+				session.setSwarmMode(command.enabled);
+				return success(id, "set_swarn_mode");
 			}
 
 			case "cycle_thinking_level": {
@@ -667,7 +678,7 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			default: {
 				const unknownCommand = command as { type: string };
-				return error(undefined, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
+				return error(id, unknownCommand.type, `Unknown command: ${unknownCommand.type}`);
 			}
 		}
 	};

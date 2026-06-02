@@ -84,6 +84,25 @@ describe("buildSystemPrompt", () => {
 
 			expect(prompt).not.toContain("dynamic_tool");
 		});
+
+		test("includes runtime tools even when a custom system prompt replaces the default", () => {
+			const prompt = buildSystemPrompt({
+				customPrompt: "Custom project prompt.",
+				selectedTools: ["read", "swarm_dispatch"],
+				toolSnippets: {
+					read: "Read file contents",
+					swarm_dispatch: "Delegate substantial multi-step work to parallel sub-agents",
+				},
+				promptGuidelines: ["Use swarm_dispatch only when Swarm mode is enabled."],
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain("Custom project prompt.");
+			expect(prompt).toContain("- swarm_dispatch: Delegate substantial multi-step work to parallel sub-agents");
+			expect(prompt).toContain("- Use swarm_dispatch only when Swarm mode is enabled.");
+		});
 	});
 
 	describe("prompt guidelines", () => {

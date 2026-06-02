@@ -317,6 +317,7 @@ export class AgentSession {
 	private _toolDefinitions: Map<string, ToolDefinitionEntry> = new Map();
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
+	private _swarmMode = false;
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
@@ -839,6 +840,10 @@ export class AgentSession {
 		return this.agent.followUpMode;
 	}
 
+	get swarmMode(): boolean {
+		return this._swarmMode;
+	}
+
 	/** Current session file path, or undefined if sessions are disabled */
 	get sessionFile(): string | undefined {
 		return this.sessionManager.getSessionFile();
@@ -907,6 +912,15 @@ export class AgentSession {
 			if (toolGuidelines) {
 				promptGuidelines.push(...toolGuidelines);
 			}
+		}
+		if (this._swarmMode) {
+			promptGuidelines.push(
+				"Swarm mode is enabled for this thread. Use swarm_dispatch only for substantial multi-step work that benefits from parallel delegation. Do not use it for simple questions or requests you can answer directly.",
+			);
+		} else {
+			promptGuidelines.push(
+				"Swarm mode is disabled for this thread. Do not call swarm_dispatch unless the user explicitly enables Swarm mode.",
+			);
 		}
 
 		const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
@@ -1554,6 +1568,12 @@ export class AgentSession {
 				previousLevel,
 			});
 		}
+	}
+
+	setSwarmMode(enabled: boolean): void {
+		this._swarmMode = enabled;
+		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+		this.agent.state.systemPrompt = this._baseSystemPrompt;
 	}
 
 	/**
@@ -2264,6 +2284,7 @@ export class AgentSession {
 					})();
 				},
 				getSystemPrompt: () => this.systemPrompt,
+				getSwarmMode: () => this.swarmMode,
 			},
 			{
 				registerProvider: (name, config) => {
@@ -2366,6 +2387,9 @@ export class AgentSession {
 					nextActiveToolNames.push(toolName);
 				}
 			}
+		}
+		if (this._toolRegistry.has("swarm_dispatch")) {
+			nextActiveToolNames.push("swarm_dispatch");
 		}
 
 		this.setActiveToolsByName([...new Set(nextActiveToolNames)]);

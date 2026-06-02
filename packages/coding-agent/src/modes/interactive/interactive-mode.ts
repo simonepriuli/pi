@@ -1683,6 +1683,7 @@ export class InteractiveMode {
 				})();
 			},
 			getSystemPrompt: () => this.session.systemPrompt,
+			getSwarmMode: () => this.session.swarmMode,
 		});
 
 		// Set up the extension shortcut handler on the default editor
