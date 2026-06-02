@@ -916,6 +916,7 @@ export class AgentSession {
 		if (this._swarmMode) {
 			promptGuidelines.push(
 				"Swarm mode is enabled for this thread. For user requests that involve substantial multi-step work and benefit from parallel delegation, use swarm_dispatch to perform the task. Do not use it for simple questions or requests you can answer directly.",
+				"When the user asks to use Swarm or swarm_dispatch, call swarm_dispatch on your first tool-using turn with concrete subtasks. Never claim swarm work has started unless swarm_dispatch was invoked in the current turn.",
 			);
 		} else {
 			promptGuidelines.push(

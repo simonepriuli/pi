@@ -24,6 +24,7 @@ describe("Swarm mode", () => {
 		expect(harness.session.swarmMode).toBe(true);
 		expect(harness.session.getActiveToolNames()).toContain("swarm_dispatch");
 		expect(harness.session.systemPrompt).toContain("Swarm mode is enabled");
+		expect(harness.session.systemPrompt).toContain("Never claim swarm work has started");
 
 		harness.session.setSwarmMode(false);
 		expect(harness.session.swarmMode).toBe(false);

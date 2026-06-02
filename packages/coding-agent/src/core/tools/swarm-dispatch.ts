@@ -3,8 +3,11 @@ import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
+import type { ModelRegistry } from "../model-registry.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -13,6 +16,8 @@ const MAX_SWARM_TASKS = 10;
 const MAX_CONCURRENCY = 4;
 const MAX_OUTPUT_CHARS = 8000;
 const WORKER_TIMEOUT_MS = 5 * 60 * 1000;
+const SWARM_WORKER_APPEND_SYSTEM_PROMPT =
+	"Swarm sub-agent: complete the assigned task, then end with a concise plain-text reply for the orchestrator. Do not finish with only tool calls or hidden reasoning.";
 
 const swarmDispatchSchema = Type.Object({
 	tasks: Type.Array(Type.String({ description: "Subtask prompt for a delegated sub-agent." }), {
@@ -83,12 +88,96 @@ function truncateOutput(text: string): string {
 	return `${text.slice(0, MAX_OUTPUT_CHARS)}\n\n[truncated ${text.length - MAX_OUTPUT_CHARS} chars]`;
 }
 
-function parseLatestAssistantText(payload: unknown): string {
-	if (!payload || typeof payload !== "object") return "";
-	const event = payload as { type?: string; message?: { role?: string; content?: Array<{ type?: string; text?: string }> } };
-	if (!event.type?.startsWith("message_") || event.message?.role !== "assistant") return "";
-	const part = event.message.content?.find((item) => item.type === "text");
-	return part?.text ?? "";
+type AssistantContentPart = {
+	type?: string;
+	text?: string;
+	thinking?: string;
+};
+
+export interface SwarmAssistantCapture {
+	text: string;
+	thinking: string;
+	stopReason?: string;
+	errorMessage?: string;
+}
+
+export function extractSwarmAssistantCapture(message: {
+	role?: string;
+	content?: AssistantContentPart[];
+	stopReason?: string;
+	errorMessage?: string;
+}): SwarmAssistantCapture | null {
+	if (message.role !== "assistant") return null;
+	const textParts: string[] = [];
+	const thinkingParts: string[] = [];
+	for (const part of message.content ?? []) {
+		if (part.type === "text" && typeof part.text === "string" && part.text.length > 0) {
+			textParts.push(part.text);
+		}
+		if (part.type === "thinking" && typeof part.thinking === "string" && part.thinking.length > 0) {
+			thinkingParts.push(part.thinking);
+		}
+	}
+	return {
+		text: textParts.join("\n").trim(),
+		thinking: thinkingParts.join("\n").trim(),
+		stopReason: message.stopReason,
+		errorMessage: message.errorMessage,
+	};
+}
+
+function pickSwarmCapturePreview(capture: SwarmAssistantCapture): string {
+	return capture.text || capture.thinking;
+}
+
+/** Resolve sub-agent stdout into user-visible output (exported for tests). */
+export function resolveSwarmWorkerOutput(params: {
+	captures: SwarmAssistantCapture[];
+	stderr: string;
+	exitCode: number | null;
+}): { output: string; success: boolean } {
+	const { captures, stderr, exitCode } = params;
+	const processOk = (exitCode ?? 1) === 0;
+	const last = captures.at(-1);
+
+	let text = "";
+	for (let i = captures.length - 1; i >= 0; i--) {
+		if (captures[i]?.text) {
+			text = captures[i].text;
+			break;
+		}
+	}
+
+	let thinking = "";
+	if (!text) {
+		for (let i = captures.length - 1; i >= 0; i--) {
+			if (captures[i]?.thinking) {
+				thinking = captures[i].thinking;
+				break;
+			}
+		}
+	}
+
+	const body = text || thinking;
+	if (body) {
+		const prefix = !text && thinking ? "[reasoning] " : "";
+		return { output: truncateOutput(`${prefix}${body}`), success: processOk };
+	}
+
+	if (last?.errorMessage?.trim()) {
+		return { output: truncateOutput(last.errorMessage.trim()), success: false };
+	}
+
+	const errText = stderr.trim();
+	if (errText) {
+		return { output: truncateOutput(errText), success: false };
+	}
+
+	const stopHint = last?.stopReason ? ` (stop: ${last.stopReason})` : "";
+	return {
+		output: `Worker completed without text output${stopHint}. Try another swarm model or simplify the subtask.`,
+		success: false,
+	};
 }
 
 function formatTaskLine(progress: WorkerProgress): string {
@@ -138,6 +227,43 @@ function toModelRefString(model: ProviderModelRef): string {
 	return `${model.provider}/${model.id}`;
 }
 
+function parseModelRef(modelRef: string): { provider: string; id: string } | null {
+	const trimmed = modelRef.trim();
+	const slash = trimmed.indexOf("/");
+	if (slash <= 0 || slash >= trimmed.length - 1) return null;
+	return { provider: trimmed.slice(0, slash), id: trimmed.slice(slash + 1) };
+}
+
+function lookupWorkerModel(
+	modelRef: string,
+	modelRegistry: ModelRegistry | undefined,
+	availableModels: Array<ProviderModelRef>,
+): Model<Api> | undefined {
+	if (!modelRegistry) return undefined;
+	const parsed = parseModelRef(modelRef);
+	if (parsed) {
+		return modelRegistry.find(parsed.provider, parsed.id);
+	}
+	const matches = availableModels.filter((candidate) => candidate.id === modelRef);
+	if (matches.length === 1) {
+		return modelRegistry.find(matches[0].provider, matches[0].id);
+	}
+	return undefined;
+}
+
+/** OpenRouter reasoning models reject effort "none" when user settings default thinking to off. */
+export function buildSwarmWorkerThinkingArgs(model: Model<Api> | undefined): string[] {
+	if (!model?.reasoning) return [];
+	const supported = getSupportedThinkingLevels(model);
+	const preferred: ModelThinkingLevel[] = ["low", "minimal", "medium", "high", "xhigh"];
+	for (const level of preferred) {
+		if (supported.includes(level)) return ["--thinking", level];
+	}
+	const fallback = supported.find((level) => level !== "off");
+	if (fallback) return ["--thinking", fallback];
+	return ["--thinking", "low"];
+}
+
 function resolveWorkerModelReference(params: {
 	requestedModel: string;
 	currentModel: ProviderModelRef | undefined;
@@ -175,23 +301,36 @@ async function runSingleTask(
 	cwd: string,
 	task: string,
 	model: string,
+	thinkingArgs: string[],
 	signal: AbortSignal | undefined,
 	index: number,
 	onProgress?: (progress: WorkerProgress) => void,
 ): Promise<WorkerResult> {
 	return new Promise((resolve) => {
 		const invocation = resolvePiInvocation();
-		const args = [...invocation.argsPrefix, "--mode", "json", "--model", model, "-p", "--no-session", task];
+		const args = [
+			...invocation.argsPrefix,
+			"--mode",
+			"json",
+			"--model",
+			model,
+			...thinkingArgs,
+			"--append-system-prompt",
+			SWARM_WORKER_APPEND_SYSTEM_PROMPT,
+			"-p",
+			"--no-session",
+			task,
+		];
 		const child = spawn(invocation.command, args, {
 			cwd,
-			env: invocation.env,
+			env: { ...process.env, ...invocation.env },
 			shell: false,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 
 		let stdoutBuffer = "";
 		let stderr = "";
-		let latestAssistantText = "";
+		const assistantCaptures: SwarmAssistantCapture[] = [];
 		let finished = false;
 		let timeout: NodeJS.Timeout | undefined;
 		let abort: (() => void) | undefined;
@@ -207,16 +346,40 @@ async function runSingleTask(
 		const processLine = (line: string) => {
 			if (!line.trim()) return;
 			try {
-				const parsed = JSON.parse(line);
-				const assistantText = parseLatestAssistantText(parsed);
-				if (assistantText) {
-					latestAssistantText = assistantText;
-					onProgress?.({
-						index,
-						status: "running",
-						preview: truncateOutput(assistantText).split("\n")[0],
-					});
+				const parsed = JSON.parse(line) as {
+					type?: string;
+					message?: {
+						role?: string;
+						content?: AssistantContentPart[];
+						stopReason?: string;
+						errorMessage?: string;
+					};
+				};
+				if (parsed.type === "message_end" && parsed.message) {
+					const capture = extractSwarmAssistantCapture(parsed.message);
+					if (capture) {
+						assistantCaptures.push(capture);
+						const preview = pickSwarmCapturePreview(capture);
+						if (preview) {
+							onProgress?.({
+								index,
+								status: "running",
+								preview: truncateOutput(preview).split("\n")[0],
+							});
+						}
+					}
+					return;
 				}
+				if (!parsed.type?.startsWith("message_") || !parsed.message) return;
+				const capture = extractSwarmAssistantCapture(parsed.message);
+				if (!capture) return;
+				const preview = pickSwarmCapturePreview(capture);
+				if (!preview) return;
+				onProgress?.({
+					index,
+					status: "running",
+					preview: truncateOutput(preview).split("\n")[0],
+				});
 			} catch {
 				// ignore non-json lines
 			}
@@ -235,8 +398,11 @@ async function runSingleTask(
 
 		child.on("close", (code) => {
 			if (stdoutBuffer.trim()) processLine(stdoutBuffer);
-			const success = (code ?? 1) === 0;
-			const output = truncateOutput(latestAssistantText || stderr || "(no output)");
+			const { output, success } = resolveSwarmWorkerOutput({
+				captures: assistantCaptures,
+				stderr,
+				exitCode: code,
+			});
 			finish({ index, task, success, output });
 		});
 
@@ -313,6 +479,7 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 			"Do not use swarm_dispatch for tool inventory questions or other requests you can answer directly.",
 			"When answering tool inventory questions, describe Swarm as an enabled delegation mode instead of listing the internal swarm_dispatch tool.",
 			"Pass at most 10 concise subtasks and aggregate the returned outputs.",
+			"Never tell the user swarm analysis is running unless you called swarm_dispatch in the same turn.",
 		],
 		parameters: swarmDispatchSchema,
 		prepareArguments(args) {
@@ -400,11 +567,15 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 			};
 			emitProgress();
 
+			const workerModel = lookupWorkerModel(model, ctx?.modelRegistry, availableModels);
+			const thinkingArgs = buildSwarmWorkerThinkingArgs(workerModel);
+
 			const results = await mapWithConcurrency(tasks, concurrency, async (task, index) => {
 				const result = await runSingleTask(
 					cwd,
 					task,
 					model,
+					thinkingArgs,
 					signal,
 					index,
 					(nextProgress) => {
