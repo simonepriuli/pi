@@ -57,6 +57,17 @@ interface WorkerProgress {
 	preview?: string;
 }
 
+type ProviderModelRef = {
+	provider: string;
+	id: string;
+};
+
+function getDefaultSwarmModel(): string {
+	const fromEnv = process.env.OPENHARNESS_SWARM_DEFAULT_MODEL?.trim();
+	if (fromEnv) return fromEnv;
+	return DEFAULT_MODEL;
+}
+
 function normalizeTasks(tasks: Array<string | { task?: unknown }>): string[] {
 	return tasks
 		.map((item) => {
@@ -121,6 +132,43 @@ function resolvePiInvocation(): { command: string; argsPrefix: string[]; env?: N
 		return { command: process.execPath, argsPrefix: [cliEntrypoint], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } };
 	}
 	return { command: "pi", argsPrefix: [] };
+}
+
+function toModelRefString(model: ProviderModelRef): string {
+	return `${model.provider}/${model.id}`;
+}
+
+function resolveWorkerModelReference(params: {
+	requestedModel: string;
+	currentModel: ProviderModelRef | undefined;
+	availableModels: Array<ProviderModelRef>;
+}): string {
+	const { requestedModel, currentModel, availableModels } = params;
+	const trimmedRequested = requestedModel.trim();
+
+	// If caller already passed canonical provider/model, keep it.
+	if (trimmedRequested.includes("/")) {
+		return trimmedRequested;
+	}
+
+	// Prefer exact current model when IDs align (preserves provider).
+	if (currentModel && currentModel.id === trimmedRequested) {
+		return toModelRefString(currentModel);
+	}
+
+	// Resolve bare IDs to canonical provider/model when available.
+	const matches = availableModels.filter((candidate) => candidate.id === trimmedRequested);
+	if (matches.length === 1) {
+		return toModelRefString(matches[0]);
+	}
+	if (matches.length > 1 && currentModel) {
+		const currentProviderMatch = matches.find((candidate) => candidate.provider === currentModel.provider);
+		if (currentProviderMatch) {
+			return toModelRefString(currentProviderMatch);
+		}
+	}
+
+	return trimmedRequested;
 }
 
 async function runSingleTask(
@@ -293,13 +341,30 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 					details: { model: ctx?.model?.id ?? DEFAULT_MODEL, concurrency: 0, totalTasks: 0 },
 				};
 			}
-			const requestedModel = params.model?.trim() || DEFAULT_MODEL;
+			const requestedModel = params.model?.trim() || getDefaultSwarmModel();
 			const concurrency = Math.max(1, Math.min(params.concurrency ?? 3, MAX_CONCURRENCY));
-			let model = requestedModel;
-			const availableModels = ctx?.modelRegistry ? await ctx.modelRegistry.getAvailable() : [];
-			const hasRequestedModel = availableModels.some((candidate) => candidate.id === requestedModel);
-			if (!hasRequestedModel) {
-				model = ctx?.model?.id ?? requestedModel;
+			const availableModels = (ctx?.modelRegistry ? await ctx.modelRegistry.getAvailable() : []).map((candidate) => ({
+				provider: candidate.provider,
+				id: candidate.id,
+			}));
+			const currentModel = ctx?.model
+				? {
+						provider: ctx.model.provider,
+						id: ctx.model.id,
+					}
+				: undefined;
+			let model = resolveWorkerModelReference({
+				requestedModel,
+				currentModel,
+				availableModels,
+			});
+			const hasRequestedModel = availableModels.some(
+				(candidate) =>
+					candidate.id === requestedModel ||
+					toModelRefString(candidate).toLowerCase() === requestedModel.toLowerCase(),
+			);
+			if (!hasRequestedModel && currentModel) {
+				model = toModelRefString(currentModel);
 			}
 			const tasks = normalizeTasks(params.tasks);
 			if (tasks.length === 0) {
