@@ -2947,7 +2947,6 @@ export class AgentSession {
 		let totalOutput = 0;
 		let totalCacheRead = 0;
 		let totalCacheWrite = 0;
-		let totalCost = 0;
 
 		for (const message of state.messages) {
 			if (message.role === "assistant") {
@@ -2957,7 +2956,13 @@ export class AgentSession {
 				totalOutput += assistantMsg.usage.output;
 				totalCacheRead += assistantMsg.usage.cacheRead;
 				totalCacheWrite += assistantMsg.usage.cacheWrite;
-				totalCost += assistantMsg.usage.cost.total;
+			}
+		}
+
+		let totalCost = 0;
+		for (const entry of this.sessionManager.getEntries()) {
+			if (entry.type === "message" && entry.message.role === "assistant") {
+				totalCost += entry.message.usage.cost.total;
 			}
 		}
 

@@ -10,7 +10,7 @@ import { createTestResourceLoader } from "./utilities.ts";
 
 const model = getModel("anthropic", "claude-sonnet-4-5")!;
 
-function createUsage(totalTokens: number): Usage {
+function createUsage(totalTokens: number, costTotal = 0): Usage {
 	return {
 		input: totalTokens,
 		output: 0,
@@ -18,23 +18,28 @@ function createUsage(totalTokens: number): Usage {
 		cacheWrite: 0,
 		totalTokens,
 		cost: {
-			input: 0,
+			input: costTotal,
 			output: 0,
 			cacheRead: 0,
 			cacheWrite: 0,
-			total: 0,
+			total: costTotal,
 		},
 	};
 }
 
-function createAssistantMessage(text: string, totalTokens: number, timestamp: number): AssistantMessage {
+function createAssistantMessage(
+	text: string,
+	totalTokens: number,
+	timestamp: number,
+	costTotal = 0,
+): AssistantMessage {
 	return {
 		role: "assistant",
 		content: [{ type: "text", text }],
 		api: model.api,
 		provider: model.provider,
 		model: model.id,
-		usage: createUsage(totalTokens),
+		usage: createUsage(totalTokens, costTotal),
 		stopReason: "stop",
 		timestamp,
 	};
@@ -113,6 +118,26 @@ describe("AgentSession.getSessionStats", () => {
 			expect(stats.contextUsage).toBeDefined();
 			expect(stats.contextUsage?.tokens).toBeNull();
 			expect(stats.contextUsage?.percent).toBeNull();
+		} finally {
+			session.dispose();
+		}
+	});
+
+	it("includes full conversation cost after compaction", () => {
+		const { session, sessionManager } = createSession();
+
+		try {
+			sessionManager.appendMessage(createUserMessage("first", 1));
+			sessionManager.appendMessage(createAssistantMessage("response1", 180_000, 2, 0.12));
+			const keptUserId = sessionManager.appendMessage(createUserMessage("second", 3));
+			sessionManager.appendMessage(createAssistantMessage("response2", 195_000, 4, 0.34));
+			sessionManager.appendCompaction("summary", keptUserId, 195_000);
+			sessionManager.appendMessage(createUserMessage("third", 5));
+			syncAgentMessages(session, sessionManager);
+
+			const stats = session.getSessionStats();
+			expect(stats.tokens.input).toBe(195_000);
+			expect(stats.cost).toBeCloseTo(0.46);
 		} finally {
 			session.dispose();
 		}
