@@ -51,6 +51,11 @@ export {
 	type ReadToolOptions,
 } from "./read.ts";
 export {
+	createSwarmDispatchTool,
+	createSwarmDispatchToolDefinition,
+	type SwarmDispatchToolInput,
+} from "./swarm-dispatch.ts";
+export {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	formatSize,
@@ -67,11 +72,6 @@ export {
 	type WriteToolInput,
 	type WriteToolOptions,
 } from "./write.ts";
-export {
-	createSwarmDispatchTool,
-	createSwarmDispatchToolDefinition,
-	type SwarmDispatchToolInput,
-} from "./swarm-dispatch.ts";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { ToolDefinition } from "../extensions/types.ts";

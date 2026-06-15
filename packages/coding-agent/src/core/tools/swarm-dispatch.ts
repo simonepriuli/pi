@@ -7,8 +7,8 @@ import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
-import type { ModelRegistry } from "../model-registry.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
+import type { ModelRegistry } from "../model-registry.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const DEFAULT_MODEL = "kimi-k2.6";
@@ -218,7 +218,11 @@ function resolvePiInvocation(): { command: string; argsPrefix: string[]; env?: N
 	const currentScript = process.argv[1];
 	const cliEntrypoint = isCliEntrypoint(currentScript) ? currentScript : resolveLocalCliEntrypoint();
 	if (cliEntrypoint && isNodeLikeRuntime()) {
-		return { command: process.execPath, argsPrefix: [cliEntrypoint], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } };
+		return {
+			command: process.execPath,
+			argsPrefix: [cliEntrypoint],
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+		};
 	}
 	return { command: "pi", argsPrefix: [] };
 }
@@ -466,7 +470,9 @@ async function mapWithConcurrency<T, R>(
 	return results;
 }
 
-export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<typeof swarmDispatchSchema, SwarmDispatchDetails> {
+export function createSwarmDispatchToolDefinition(
+	cwd: string,
+): ToolDefinition<typeof swarmDispatchSchema, SwarmDispatchDetails> {
 	return {
 		name: "swarm_dispatch",
 		label: "swarm_dispatch",
@@ -510,10 +516,12 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 			}
 			const requestedModel = params.model?.trim() || getDefaultSwarmModel();
 			const concurrency = Math.max(1, Math.min(params.concurrency ?? 3, MAX_CONCURRENCY));
-			const availableModels = (ctx?.modelRegistry ? await ctx.modelRegistry.getAvailable() : []).map((candidate) => ({
-				provider: candidate.provider,
-				id: candidate.id,
-			}));
+			const availableModels = (ctx?.modelRegistry ? await ctx.modelRegistry.getAvailable() : []).map(
+				(candidate) => ({
+					provider: candidate.provider,
+					id: candidate.id,
+				}),
+			);
 			const currentModel = ctx?.model
 				? {
 						provider: ctx.model.provider,
@@ -571,22 +579,14 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 			const thinkingArgs = buildSwarmWorkerThinkingArgs(workerModel);
 
 			const results = await mapWithConcurrency(tasks, concurrency, async (task, index) => {
-				const result = await runSingleTask(
-					cwd,
-					task,
-					model,
-					thinkingArgs,
-					signal,
-					index,
-					(nextProgress) => {
-						progress[index] = {
-							...progress[index],
-							status: nextProgress.status,
-							preview: nextProgress.preview ?? progress[index]?.preview,
-						};
-						emitProgress();
-					},
-				);
+				const result = await runSingleTask(cwd, task, model, thinkingArgs, signal, index, (nextProgress) => {
+					progress[index] = {
+						...progress[index],
+						status: nextProgress.status,
+						preview: nextProgress.preview ?? progress[index]?.preview,
+					};
+					emitProgress();
+				});
 				progress[index] = {
 					index,
 					status: result.success ? "done" : "error",
@@ -608,7 +608,9 @@ export function createSwarmDispatchToolDefinition(cwd: string): ToolDefinition<t
 						type: "text",
 						text:
 							`Swarm completed ${successCount}/${results.length} subtasks using \`${model}\`.` +
-							(hasRequestedModel ? "" : ` Requested model \`${requestedModel}\` was unavailable, fallback applied.`) +
+							(hasRequestedModel
+								? ""
+								: ` Requested model \`${requestedModel}\` was unavailable, fallback applied.`) +
 							`\n\n${sections}`,
 					},
 				],

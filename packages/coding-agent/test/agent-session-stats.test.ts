@@ -27,12 +27,7 @@ function createUsage(totalTokens: number, costTotal = 0): Usage {
 	};
 }
 
-function createAssistantMessage(
-	text: string,
-	totalTokens: number,
-	timestamp: number,
-	costTotal = 0,
-): AssistantMessage {
+function createAssistantMessage(text: string, totalTokens: number, timestamp: number, costTotal = 0): AssistantMessage {
 	return {
 		role: "assistant",
 		content: [{ type: "text", text }],
