@@ -12372,23 +12372,6 @@ export const MODELS = {
 			contextWindow: 256000,
 			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
-		"xiaomi/mimo-v2-flash": {
-			id: "xiaomi/mimo-v2-flash",
-			name: "Xiaomi: MiMo-V2-Flash",
-			api: "openai-completions",
-			provider: "openrouter",
-			baseUrl: "https://openrouter.ai/api/v1",
-			reasoning: true,
-			input: ["text"],
-			cost: {
-				input: 0.09999999999999999,
-				output: 0.3,
-				cacheRead: 0.01,
-				cacheWrite: 0,
-			},
-			contextWindow: 262144,
-			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
 		"xiaomi/mimo-v2.5": {
 			id: "xiaomi/mimo-v2.5",
 			name: "Xiaomi: MiMo-V2.5",
