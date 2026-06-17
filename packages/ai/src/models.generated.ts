@@ -3749,6 +3749,24 @@ export const MODELS = {
 			contextWindow: 131072,
 			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
+		"@cf/zai-org/glm-5.2": {
+			id: "@cf/zai-org/glm-5.2",
+			name: "Glm 5.2",
+			api: "openai-completions",
+			provider: "cloudflare-workers-ai",
+			baseUrl: "https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+			compat: {"sendSessionAffinityHeaders":true},
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1.4,
+				output: 4.4,
+				cacheRead: 0.26,
+				cacheWrite: 0,
+			},
+			contextWindow: 262144,
+			maxTokens: 262144,
+		} satisfies Model<"openai-completions">,
 	},
 	"deepseek": {
 		"deepseek-v4-flash": {
@@ -3803,7 +3821,7 @@ export const MODELS = {
 			cost: {
 				input: 0.14,
 				output: 0.28,
-				cacheRead: 0.03,
+				cacheRead: 0.028,
 				cacheWrite: 0,
 			},
 			contextWindow: 1000000,
@@ -3845,6 +3863,24 @@ export const MODELS = {
 			contextWindow: 202800,
 			maxTokens: 131072,
 		} satisfies Model<"anthropic-messages">,
+		"accounts/fireworks/models/glm-5p2": {
+			id: "accounts/fireworks/models/glm-5p2",
+			name: "GLM 5.2",
+			api: "anthropic-messages",
+			provider: "fireworks",
+			baseUrl: "https://api.fireworks.ai/inference",
+			compat: {"sendSessionAffinityHeaders":true,"supportsEagerToolInputStreaming":false,"supportsCacheControlOnTools":false,"supportsLongCacheRetention":false},
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1.4,
+				output: 4.4,
+				cacheRead: 0.26,
+				cacheWrite: 0,
+			},
+			contextWindow: 1048576,
+			maxTokens: 131072,
+		} satisfies Model<"anthropic-messages">,
 		"accounts/fireworks/models/gpt-oss-120b": {
 			id: "accounts/fireworks/models/gpt-oss-120b",
 			name: "GPT OSS 120B",
@@ -3857,7 +3893,7 @@ export const MODELS = {
 			cost: {
 				input: 0.15,
 				output: 0.6,
-				cacheRead: 0.01,
+				cacheRead: 0.015,
 				cacheWrite: 0,
 			},
 			contextWindow: 131072,
@@ -4035,7 +4071,7 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
-				input: 2,
+				input: 1.9,
 				output: 8,
 				cacheRead: 0.38,
 				cacheWrite: 0,
@@ -9082,13 +9118,13 @@ export const MODELS = {
 			thinkingLevelMap: {"minimal":null,"low":null,"medium":null,"high":"high","xhigh":"xhigh"},
 			input: ["text"],
 			cost: {
-				input: 0.098,
-				output: 0.196,
+				input: 0.09,
+				output: 0.18,
 				cacheRead: 0.02,
 				cacheWrite: 0,
 			},
 			contextWindow: 1048576,
-			maxTokens: 4096,
+			maxTokens: 65536,
 		} satisfies Model<"openai-completions">,
 		"deepseek/deepseek-v4-pro": {
 			id: "deepseek/deepseek-v4-pro",
@@ -9532,8 +9568,8 @@ export const MODELS = {
 				cacheRead: 0.06,
 				cacheWrite: 0,
 			},
-			contextWindow: 256000,
-			maxTokens: 80000,
+			contextWindow: 262144,
+			maxTokens: 144000,
 		} satisfies Model<"openai-completions">,
 		"meta-llama/llama-3.1-70b-instruct": {
 			id: "meta-llama/llama-3.1-70b-instruct",
@@ -9737,7 +9773,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 1048576,
-			maxTokens: 512000,
+			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
 		"mistralai/codestral-2508": {
 			id: "mistralai/codestral-2508",
@@ -10073,7 +10109,7 @@ export const MODELS = {
 			cost: {
 				input: 0.6,
 				output: 2.5,
-				cacheRead: 0,
+				cacheRead: 0.6,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
@@ -10123,13 +10159,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
-				input: 0.75,
+				input: 0.74,
 				output: 3.5,
-				cacheRead: 0.16,
+				cacheRead: 0.15,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 16384,
 		} satisfies Model<"openai-completions">,
 		"nex-agi/nex-n2-pro:free": {
 			id: "nex-agi/nex-n2-pro:free",
@@ -10260,8 +10296,8 @@ export const MODELS = {
 			input: ["text"],
 			cost: {
 				input: 0.5,
-				output: 2.5,
-				cacheRead: 0.15,
+				output: 2.2,
+				cacheRead: 0.09999999999999999,
 				cacheWrite: 0,
 			},
 			contextWindow: 1000000,
@@ -10452,7 +10488,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 1047576,
-			maxTokens: 32768,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-4.1-nano": {
 			id: "openai/gpt-4.1-nano",
@@ -10482,7 +10518,7 @@ export const MODELS = {
 			cost: {
 				input: 2.5,
 				output: 10,
-				cacheRead: 0,
+				cacheRead: 1.25,
 				cacheWrite: 0,
 			},
 			contextWindow: 128000,
@@ -10618,11 +10654,11 @@ export const MODELS = {
 			cost: {
 				input: 0.25,
 				output: 2,
-				cacheRead: 0.024999999999999998,
+				cacheRead: 0.03,
 				cacheWrite: 0,
 			},
 			contextWindow: 400000,
-			maxTokens: 128000,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-5-nano": {
 			id: "openai/gpt-5-nano",
@@ -10686,11 +10722,11 @@ export const MODELS = {
 			cost: {
 				input: 1.25,
 				output: 10,
-				cacheRead: 0.13,
+				cacheRead: 0.125,
 				cacheWrite: 0,
 			},
 			contextWindow: 128000,
-			maxTokens: 32000,
+			maxTokens: 16384,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-5.1-codex": {
 			id: "openai/gpt-5.1-codex",
@@ -10777,7 +10813,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 128000,
-			maxTokens: 16384,
+			maxTokens: 32000,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-5.2-codex": {
 			id: "openai/gpt-5.2-codex",
@@ -11892,7 +11928,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262144,
+			maxTokens: 65536,
 		} satisfies Model<"openai-completions">,
 		"qwen/qwen3.5-27b": {
 			id: "qwen/qwen3.5-27b",
@@ -11959,8 +11995,8 @@ export const MODELS = {
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
-			contextWindow: 262144,
-			maxTokens: 262144,
+			contextWindow: 256000,
+			maxTokens: 32768,
 		} satisfies Model<"openai-completions">,
 		"qwen/qwen3.5-flash-02-23": {
 			id: "qwen/qwen3.5-flash-02-23",
@@ -12556,6 +12592,23 @@ export const MODELS = {
 			},
 			contextWindow: 202752,
 			maxTokens: 4096,
+		} satisfies Model<"openai-completions">,
+		"z-ai/glm-5.2": {
+			id: "z-ai/glm-5.2",
+			name: "Z.ai: GLM 5.2",
+			api: "openai-completions",
+			provider: "openrouter",
+			baseUrl: "https://openrouter.ai/api/v1",
+			reasoning: true,
+			input: ["text"],
+			cost: {
+				input: 1.4,
+				output: 4.4,
+				cacheRead: 0.26,
+				cacheWrite: 0,
+			},
+			contextWindow: 1048576,
+			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
 		"~anthropic/claude-fable-latest": {
 			id: "~anthropic/claude-fable-latest",
@@ -14673,7 +14726,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 4096,
+			maxTokens: 262144,
 		} satisfies Model<"anthropic-messages">,
 		"nvidia/nemotron-3-super-120b-a12b": {
 			id: "nvidia/nemotron-3-super-120b-a12b",
