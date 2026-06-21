@@ -10144,7 +10144,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262142,
+			maxTokens: 65535,
 		} satisfies Model<"openai-completions">,
 		"moonshotai/kimi-k2.7-code": {
 			id: "moonshotai/kimi-k2.7-code",
@@ -12757,7 +12757,7 @@ export const MODELS = {
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
-			maxTokens: 262142,
+			maxTokens: 65535,
 		} satisfies Model<"openai-completions">,
 		"~openai/gpt-latest": {
 			id: "~openai/gpt-latest",
