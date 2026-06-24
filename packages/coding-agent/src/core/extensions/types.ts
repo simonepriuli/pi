@@ -330,6 +330,10 @@ export interface ExtensionContext {
 	getSystemPrompt(): string;
 	/** Whether Swarm mode is enabled for this session. */
 	getSwarmMode(): boolean;
+	/** Whether Plan mode is enabled for this session. */
+	getPlanMode(): boolean;
+	/** Conversation id for the active plan file, when Plan mode is enabled. */
+	getPlanConversationId(): string | null;
 }
 
 /**
@@ -1509,6 +1513,8 @@ export interface ExtensionContextActions {
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
 	getSwarmMode: () => boolean;
+	getPlanMode: () => boolean;
+	getPlanConversationId: () => string | null;
 }
 
 /**

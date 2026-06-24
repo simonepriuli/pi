@@ -20,6 +20,8 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 		compact,
 		getSystemPrompt: () => "",
 		getSwarmMode: () => false,
+		getPlanMode: () => false,
+		getPlanConversationId: () => null,
 	};
 }
 

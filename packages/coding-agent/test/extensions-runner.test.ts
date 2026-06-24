@@ -84,6 +84,8 @@ describe("ExtensionRunner", () => {
 		compact: () => {},
 		getSystemPrompt: () => "",
 		getSwarmMode: () => false,
+		getPlanMode: () => false,
+		getPlanConversationId: () => null,
 	};
 
 	describe("shortcut conflicts", () => {

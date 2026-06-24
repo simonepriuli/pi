@@ -444,6 +444,8 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 					model: session.model,
 					thinkingLevel: session.thinkingLevel,
 					swarmMode: session.swarmMode,
+					planMode: session.planMode,
+					planConversationId: session.planConversationId ?? undefined,
 					isStreaming: session.isStreaming,
 					isCompacting: session.isCompacting,
 					steeringMode: session.steeringMode,
@@ -497,6 +499,11 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 			case "set_swarm_mode": {
 				session.setSwarmMode(command.enabled);
 				return success(id, "set_swarm_mode");
+			}
+
+			case "set_plan_mode": {
+				session.setPlanMode(command.enabled, command.conversationId);
+				return success(id, "set_plan_mode");
 			}
 
 			case "set_swarn_mode": {

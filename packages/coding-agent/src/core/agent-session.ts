@@ -318,6 +318,8 @@ export class AgentSession {
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
 	private _swarmMode = false;
+	private _planMode = false;
+	private _planConversationId: string | null = null;
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
@@ -844,6 +846,14 @@ export class AgentSession {
 		return this._swarmMode;
 	}
 
+	get planMode(): boolean {
+		return this._planMode;
+	}
+
+	get planConversationId(): string | null {
+		return this._planConversationId;
+	}
+
 	/** Current session file path, or undefined if sessions are disabled */
 	get sessionFile(): string | undefined {
 		return this.sessionManager.getSessionFile();
@@ -921,6 +931,11 @@ export class AgentSession {
 		} else {
 			promptGuidelines.push(
 				"Swarm mode is disabled for this thread. Do not call swarm_dispatch unless the user explicitly enables Swarm mode.",
+			);
+		}
+		if (this._planMode) {
+			promptGuidelines.push(
+				"Plan mode is enabled for this thread. Interview the user relentlessly until design uncertainty is resolved, then write the plan with write_plan. Do not edit project code, call swarm_dispatch, or implement until the user clicks Implement plan.",
 			);
 		}
 
@@ -1573,6 +1588,17 @@ export class AgentSession {
 
 	setSwarmMode(enabled: boolean): void {
 		this._swarmMode = enabled;
+		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+		this.agent.state.systemPrompt = this._baseSystemPrompt;
+	}
+
+	setPlanMode(enabled: boolean, conversationId?: string): void {
+		this._planMode = enabled;
+		if (enabled && conversationId) {
+			this._planConversationId = conversationId;
+		} else if (!enabled) {
+			this._planConversationId = null;
+		}
 		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
 		this.agent.state.systemPrompt = this._baseSystemPrompt;
 	}
@@ -2286,6 +2312,8 @@ export class AgentSession {
 				},
 				getSystemPrompt: () => this.systemPrompt,
 				getSwarmMode: () => this.swarmMode,
+				getPlanMode: () => this.planMode,
+				getPlanConversationId: () => this.planConversationId,
 			},
 			{
 				registerProvider: (name, config) => {

@@ -36,6 +36,7 @@ export type RpcCommand =
 	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
 	| { id?: string; type: "set_swarm_mode"; enabled: boolean }
 	| { id?: string; type: "set_swarn_mode"; enabled: boolean } // backwards compatibility
+	| { id?: string; type: "set_plan_mode"; enabled: boolean; conversationId?: string }
 	| { id?: string; type: "cycle_thinking_level" }
 
 	// Queue modes
@@ -94,6 +95,8 @@ export interface RpcSessionState {
 	model?: Model<any>;
 	thinkingLevel: ThinkingLevel;
 	swarmMode: boolean;
+	planMode: boolean;
+	planConversationId?: string;
 	isStreaming: boolean;
 	isCompacting: boolean;
 	steeringMode: "all" | "one-at-a-time";
@@ -148,6 +151,7 @@ export type RpcResponse =
 	// Thinking
 	| { id?: string; type: "response"; command: "set_thinking_level"; success: true }
 	| { id?: string; type: "response"; command: "set_swarm_mode"; success: true }
+	| { id?: string; type: "response"; command: "set_plan_mode"; success: true }
 	| { id?: string; type: "response"; command: "set_swarn_mode"; success: true } // backwards compatibility
 	| {
 			id?: string;
