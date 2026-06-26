@@ -41,10 +41,21 @@ const swarmDispatchSchema = Type.Object({
 
 export type SwarmDispatchToolInput = Static<typeof swarmDispatchSchema>;
 
+type WorkerStatus = "queued" | "running" | "done" | "error";
+
+export interface SwarmWorkerProgress {
+	index: number;
+	status: WorkerStatus;
+	action?: string;
+	preview?: string;
+	task: string;
+}
+
 interface SwarmDispatchDetails {
 	model: string;
 	concurrency: number;
 	totalTasks: number;
+	workers?: SwarmWorkerProgress[];
 }
 
 interface WorkerResult {
@@ -54,11 +65,10 @@ interface WorkerResult {
 	output: string;
 }
 
-type WorkerStatus = "queued" | "running" | "done" | "error";
-
 interface WorkerProgress {
 	index: number;
 	status: WorkerStatus;
+	action?: string;
 	preview?: string;
 }
 
@@ -126,10 +136,6 @@ export function extractSwarmAssistantCapture(message: {
 	};
 }
 
-function pickSwarmCapturePreview(capture: SwarmAssistantCapture): string {
-	return capture.text || capture.thinking;
-}
-
 /** Resolve sub-agent stdout into user-visible output (exported for tests). */
 export function resolveSwarmWorkerOutput(params: {
 	captures: SwarmAssistantCapture[];
@@ -180,6 +186,40 @@ export function resolveSwarmWorkerOutput(params: {
 	};
 }
 
+export function formatSwarmWorkerAction(toolName: string): string {
+	const name = toolName.toLowerCase();
+	switch (name) {
+		case "read":
+		case "read_docx":
+		case "read_xlsx":
+		case "grep":
+		case "find":
+		case "ls":
+			return "Exploring files";
+		case "bash":
+			return "Running commands";
+		case "edit":
+		case "write":
+		case "edit_docx":
+		case "edit_xlsx":
+			return "Editing files";
+		case "web_search":
+			return "Searching the web";
+		default:
+			return "Working";
+	}
+}
+
+export function mapSwarmWorkerProgress(progress: WorkerProgress[], tasks: string[]): SwarmWorkerProgress[] {
+	return progress.map((entry) => ({
+		index: entry.index,
+		status: entry.status,
+		action: entry.action,
+		preview: entry.preview,
+		task: tasks[entry.index] ?? "",
+	}));
+}
+
 function formatTaskLine(progress: WorkerProgress): string {
 	const taskNumber = progress.index + 1;
 	const statusIcon =
@@ -190,7 +230,8 @@ function formatTaskLine(progress: WorkerProgress): string {
 				: progress.status === "done"
 					? "ok"
 					: "xx";
-	const suffix = progress.preview?.trim() ? ` ${progress.preview.trim()}` : "";
+	const label = progress.action?.trim() || progress.preview?.trim();
+	const suffix = label ? ` ${label}` : "";
 	return `Subagent ${taskNumber}: ${statusIcon}${suffix}`;
 }
 
@@ -335,6 +376,7 @@ async function runSingleTask(
 		let stdoutBuffer = "";
 		let stderr = "";
 		const assistantCaptures: SwarmAssistantCapture[] = [];
+		let workerAction = "Starting…";
 		let finished = false;
 		let timeout: NodeJS.Timeout | undefined;
 		let abort: (() => void) | undefined;
@@ -347,11 +389,18 @@ async function runSingleTask(
 			resolve(result);
 		};
 
+		const emitWorkerProgress = (action: string, status: WorkerStatus = "running") => {
+			workerAction = action;
+			onProgress?.({ index, status, action });
+		};
+
 		const processLine = (line: string) => {
 			if (!line.trim()) return;
 			try {
 				const parsed = JSON.parse(line) as {
 					type?: string;
+					toolName?: string;
+					assistantMessageEvent?: { type?: string };
 					message?: {
 						role?: string;
 						content?: AssistantContentPart[];
@@ -359,17 +408,42 @@ async function runSingleTask(
 						errorMessage?: string;
 					};
 				};
+
+				if (parsed.type === "tool_execution_start" && parsed.toolName) {
+					emitWorkerProgress(formatSwarmWorkerAction(parsed.toolName));
+					return;
+				}
+
+				if (parsed.type === "agent_start" || parsed.type === "turn_start") {
+					if (workerAction === "Starting…") {
+						emitWorkerProgress("Reasoning");
+					}
+					return;
+				}
+
+				if (parsed.type === "message_update" && parsed.assistantMessageEvent) {
+					const eventType = parsed.assistantMessageEvent.type;
+					if (
+						eventType === "thinking_start" ||
+						eventType === "thinking_delta" ||
+						eventType === "toolcall_start" ||
+						eventType === "toolcall_delta" ||
+						eventType === "text_start" ||
+						eventType === "text_delta"
+					) {
+						if (workerAction === "Starting…" || workerAction === "Reasoning") {
+							emitWorkerProgress("Reasoning");
+						}
+					}
+					return;
+				}
+
 				if (parsed.type === "message_end" && parsed.message) {
 					const capture = extractSwarmAssistantCapture(parsed.message);
 					if (capture) {
 						assistantCaptures.push(capture);
-						const preview = pickSwarmCapturePreview(capture);
-						if (preview) {
-							onProgress?.({
-								index,
-								status: "running",
-								preview: truncateOutput(preview).split("\n")[0],
-							});
+						if (capture.thinking && !capture.text && workerAction === "Starting…") {
+							emitWorkerProgress("Reasoning");
 						}
 					}
 					return;
@@ -377,13 +451,9 @@ async function runSingleTask(
 				if (!parsed.type?.startsWith("message_") || !parsed.message) return;
 				const capture = extractSwarmAssistantCapture(parsed.message);
 				if (!capture) return;
-				const preview = pickSwarmCapturePreview(capture);
-				if (!preview) return;
-				onProgress?.({
-					index,
-					status: "running",
-					preview: truncateOutput(preview).split("\n")[0],
-				});
+				if (capture.thinking && !capture.text && workerAction === "Starting…") {
+					emitWorkerProgress("Reasoning");
+				}
 			} catch {
 				// ignore non-json lines
 			}
@@ -448,7 +518,7 @@ async function runSingleTask(
 			if (signal.aborted) abort();
 			else signal.addEventListener("abort", abort, { once: true });
 		}
-		onProgress?.({ index, status: "running" });
+		onProgress?.({ index, status: "running", action: workerAction });
 	});
 }
 
@@ -570,7 +640,12 @@ export function createSwarmDispatchToolDefinition(
 							text: progress.map((entry) => formatTaskLine(entry)).join("\n"),
 						},
 					],
-					details: { model, concurrency, totalTasks: tasks.length },
+					details: {
+						model,
+						concurrency,
+						totalTasks: tasks.length,
+						workers: mapSwarmWorkerProgress(progress, tasks),
+					},
 				});
 			};
 			emitProgress();
@@ -583,6 +658,7 @@ export function createSwarmDispatchToolDefinition(
 					progress[index] = {
 						...progress[index],
 						status: nextProgress.status,
+						action: nextProgress.action ?? progress[index]?.action,
 						preview: nextProgress.preview ?? progress[index]?.preview,
 					};
 					emitProgress();

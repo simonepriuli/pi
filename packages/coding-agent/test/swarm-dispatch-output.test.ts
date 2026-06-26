@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
 	buildSwarmWorkerThinkingArgs,
 	extractSwarmAssistantCapture,
+	formatSwarmWorkerAction,
+	mapSwarmWorkerProgress,
 	resolveSwarmWorkerOutput,
 } from "../src/core/tools/swarm-dispatch.ts";
 
@@ -15,6 +17,41 @@ describe("swarm worker thinking args", () => {
 	it("does not pass thinking flags for non-reasoning models", () => {
 		const model = getModel("openai", "gpt-4o-mini");
 		expect(buildSwarmWorkerThinkingArgs(model)).toEqual([]);
+	});
+});
+
+describe("swarm worker progress details", () => {
+	it("maps worker progress into structured details for UI clients", () => {
+		const workers = mapSwarmWorkerProgress(
+			[
+				{ index: 0, status: "running", action: "Exploring files" },
+				{ index: 1, status: "queued" },
+			],
+			["Explore mention/file attachment flow", "Explore work mode workspace cwd"],
+		);
+		expect(workers).toEqual([
+			{
+				index: 0,
+				status: "running",
+				action: "Exploring files",
+				preview: undefined,
+				task: "Explore mention/file attachment flow",
+			},
+			{
+				index: 1,
+				status: "queued",
+				action: undefined,
+				preview: undefined,
+				task: "Explore work mode workspace cwd",
+			},
+		]);
+	});
+
+	it("maps tool names to concise action labels", () => {
+		expect(formatSwarmWorkerAction("read")).toBe("Exploring files");
+		expect(formatSwarmWorkerAction("bash")).toBe("Running commands");
+		expect(formatSwarmWorkerAction("grep")).toBe("Exploring files");
+		expect(formatSwarmWorkerAction("custom_tool")).toBe("Working");
 	});
 });
 
