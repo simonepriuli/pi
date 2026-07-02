@@ -40,6 +40,7 @@ import {
 } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
 import { headersToRecord } from "../utils/headers.ts";
+import { formatCodexLimitError, formatCodexStreamErrorEvent } from "./codex-limit-error.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -104,7 +105,7 @@ interface RequestBody {
 // ============================================================================
 
 function isTerminalRateLimitError(errorText: string): boolean {
-	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|available balance|insufficient_quota|out of budget|quota exceeded|billing/i.test(
+	return /GoUsageLimitError|FreeUsageLimitError|Monthly usage limit reached|You have hit your ChatGPT usage limit|available balance|insufficient_quota|out of budget|quota exceeded|billing/i.test(
 		errorText,
 	);
 }
@@ -584,19 +585,33 @@ async function* mapCodexEvents(events: AsyncIterable<Record<string, unknown>>): 
 		if (!type) continue;
 
 		if (type === "error") {
-			const code = (event as { code?: string }).code || "";
-			const message = (event as { message?: string }).message || "";
-			throw new CodexApiError(`Codex error: ${message || code || JSON.stringify(event)}`, {
+			const { message, code } = formatCodexStreamErrorEvent(event);
+			throw new CodexApiError(message, {
 				code: code || undefined,
 				payload: event,
 			});
 		}
 
 		if (type === "response.failed") {
-			const response = (event as { response?: { error?: { code?: string; message?: string } } }).response;
-			const code = response?.error?.code;
-			const message = response?.error?.message;
-			throw new CodexApiError(message || "Codex response failed", { code, payload: event });
+			const response = (
+				event as {
+					response?: {
+						error?: {
+							code?: string;
+							message?: string;
+							type?: string;
+							plan_type?: string;
+							resets_at?: number;
+							resets_in_seconds?: number;
+						};
+					};
+				}
+			).response;
+			const err = response?.error;
+			const friendly = err ? formatCodexLimitError(err) : undefined;
+			const code = err?.code || err?.type;
+			const message = friendly || err?.message || "Codex response failed";
+			throw new CodexApiError(message, { code, payload: event });
 		}
 
 		if (type === "response.done" || type === "response.completed" || type === "response.incomplete") {
@@ -1387,19 +1402,18 @@ async function parseErrorResponse(response: Response): Promise<{ message: string
 
 	try {
 		const parsed = JSON.parse(raw) as {
-			error?: { code?: string; type?: string; message?: string; plan_type?: string; resets_at?: number };
+			error?: {
+				code?: string;
+				type?: string;
+				message?: string;
+				plan_type?: string;
+				resets_at?: number;
+				resets_in_seconds?: number;
+			};
 		};
 		const err = parsed?.error;
 		if (err) {
-			const code = err.code || err.type || "";
-			if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
-				const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
-				const mins = err.resets_at
-					? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
-					: undefined;
-				const when = mins !== undefined ? ` Try again in ~${mins} min.` : "";
-				friendlyMessage = `You have hit your ChatGPT usage limit${plan}.${when}`.trim();
-			}
+			friendlyMessage = formatCodexLimitError(err, response.status);
 			message = err.message || friendlyMessage || message;
 		}
 	} catch {}
