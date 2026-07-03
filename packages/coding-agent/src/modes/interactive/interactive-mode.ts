@@ -1686,6 +1686,12 @@ export class InteractiveMode {
 			getSwarmMode: () => this.session.swarmMode,
 			getPlanMode: () => this.session.planMode,
 			getPlanConversationId: () => this.session.planConversationId,
+			getDebugMode: () => this.session.debugMode,
+			getDebugConversationId: () => this.session.debugConversationId,
+			getDebugReportWritten: () => this.session.debugReportWritten,
+			setDebugReportWritten: (written: boolean) => {
+				this.session.setDebugReportWritten(written);
+			},
 		});
 
 		// Set up the extension shortcut handler on the default editor

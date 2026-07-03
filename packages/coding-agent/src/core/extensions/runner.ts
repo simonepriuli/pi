@@ -243,6 +243,10 @@ export class ExtensionRunner {
 	private getSwarmModeFn: () => boolean = () => false;
 	private getPlanModeFn: () => boolean = () => false;
 	private getPlanConversationIdFn: () => string | null = () => null;
+	private getDebugModeFn: () => boolean = () => false;
+	private getDebugConversationIdFn: () => string | null = () => null;
+	private getDebugReportWrittenFn: () => boolean = () => false;
+	private setDebugReportWrittenFn: (written: boolean) => void = () => {};
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
 	private forkHandler: ForkHandler = async () => ({ cancelled: false });
 	private navigateTreeHandler: NavigateTreeHandler = async () => ({ cancelled: false });
@@ -305,6 +309,10 @@ export class ExtensionRunner {
 		this.getSwarmModeFn = contextActions.getSwarmMode;
 		this.getPlanModeFn = contextActions.getPlanMode;
 		this.getPlanConversationIdFn = contextActions.getPlanConversationId;
+		this.getDebugModeFn = contextActions.getDebugMode;
+		this.getDebugConversationIdFn = contextActions.getDebugConversationId;
+		this.getDebugReportWrittenFn = contextActions.getDebugReportWritten;
+		this.setDebugReportWrittenFn = contextActions.setDebugReportWritten;
 
 		// Flush provider registrations queued during extension loading
 		for (const { name, config, extensionPath } of this.runtime.pendingProviderRegistrations) {
@@ -654,6 +662,22 @@ export class ExtensionRunner {
 			getPlanConversationId: () => {
 				runner.assertActive();
 				return runner.getPlanConversationIdFn();
+			},
+			getDebugMode: () => {
+				runner.assertActive();
+				return runner.getDebugModeFn();
+			},
+			getDebugConversationId: () => {
+				runner.assertActive();
+				return runner.getDebugConversationIdFn();
+			},
+			getDebugReportWritten: () => {
+				runner.assertActive();
+				return runner.getDebugReportWrittenFn();
+			},
+			setDebugReportWritten: (written: boolean) => {
+				runner.assertActive();
+				runner.setDebugReportWrittenFn(written);
 			},
 		};
 	}

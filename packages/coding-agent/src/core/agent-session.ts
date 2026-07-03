@@ -320,6 +320,9 @@ export class AgentSession {
 	private _swarmMode = false;
 	private _planMode = false;
 	private _planConversationId: string | null = null;
+	private _debugMode = false;
+	private _debugConversationId: string | null = null;
+	private _debugReportWritten = false;
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
@@ -854,6 +857,18 @@ export class AgentSession {
 		return this._planConversationId;
 	}
 
+	get debugMode(): boolean {
+		return this._debugMode;
+	}
+
+	get debugConversationId(): string | null {
+		return this._debugConversationId;
+	}
+
+	get debugReportWritten(): boolean {
+		return this._debugReportWritten;
+	}
+
 	/** Current session file path, or undefined if sessions are disabled */
 	get sessionFile(): string | undefined {
 		return this.sessionManager.getSessionFile();
@@ -937,6 +952,17 @@ export class AgentSession {
 			promptGuidelines.push(
 				"Plan mode is enabled for this thread. Interview the user relentlessly until design uncertainty is resolved, then write the plan with write_plan. Do not edit project code, call swarm_dispatch, or implement until the user clicks Implement plan.",
 			);
+		}
+		if (this._debugMode) {
+			if (this._debugReportWritten) {
+				promptGuidelines.push(
+					"Debug mode is enabled and the root-cause report was written. Ask the user before applying code fixes. Edits are allowed after you have their approval.",
+				);
+			} else {
+				promptGuidelines.push(
+					"Debug mode is enabled for this thread. Focus on repro steps, logs, and stack traces. Investigate read-only until root cause is confident, then call write_debug_report. Do not edit project files or call swarm_dispatch until the report is written.",
+				);
+			}
 		}
 
 		const loaderSystemPrompt = this._resourceLoader.getSystemPrompt();
@@ -1599,6 +1625,27 @@ export class AgentSession {
 		} else if (!enabled) {
 			this._planConversationId = null;
 		}
+		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+		this.agent.state.systemPrompt = this._baseSystemPrompt;
+	}
+
+	setDebugMode(enabled: boolean, conversationId?: string): void {
+		this._debugMode = enabled;
+		if (enabled) {
+			this._debugReportWritten = false;
+			if (conversationId) {
+				this._debugConversationId = conversationId;
+			}
+		} else {
+			this._debugConversationId = null;
+			this._debugReportWritten = false;
+		}
+		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+		this.agent.state.systemPrompt = this._baseSystemPrompt;
+	}
+
+	setDebugReportWritten(written: boolean): void {
+		this._debugReportWritten = written;
 		this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
 		this.agent.state.systemPrompt = this._baseSystemPrompt;
 	}
@@ -2314,6 +2361,12 @@ export class AgentSession {
 				getSwarmMode: () => this.swarmMode,
 				getPlanMode: () => this.planMode,
 				getPlanConversationId: () => this.planConversationId,
+				getDebugMode: () => this.debugMode,
+				getDebugConversationId: () => this.debugConversationId,
+				getDebugReportWritten: () => this.debugReportWritten,
+				setDebugReportWritten: (written: boolean) => {
+					this.setDebugReportWritten(written);
+				},
 			},
 			{
 				registerProvider: (name, config) => {

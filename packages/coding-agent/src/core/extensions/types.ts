@@ -334,6 +334,14 @@ export interface ExtensionContext {
 	getPlanMode(): boolean;
 	/** Conversation id for the active plan file, when Plan mode is enabled. */
 	getPlanConversationId(): string | null;
+	/** Whether Debug mode is enabled for this session. */
+	getDebugMode(): boolean;
+	/** Conversation id for the active debug report file, when Debug mode is enabled. */
+	getDebugConversationId(): string | null;
+	/** Whether the debug root-cause report has been written for this session. */
+	getDebugReportWritten(): boolean;
+	/** Mark the debug root-cause report as written, lifting edit restrictions. */
+	setDebugReportWritten(written: boolean): void;
 }
 
 /**
@@ -1515,6 +1523,10 @@ export interface ExtensionContextActions {
 	getSwarmMode: () => boolean;
 	getPlanMode: () => boolean;
 	getPlanConversationId: () => string | null;
+	getDebugMode: () => boolean;
+	getDebugConversationId: () => string | null;
+	getDebugReportWritten: () => boolean;
+	setDebugReportWritten: (written: boolean) => void;
 }
 
 /**

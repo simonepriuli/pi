@@ -86,6 +86,10 @@ describe("ExtensionRunner", () => {
 		getSwarmMode: () => false,
 		getPlanMode: () => false,
 		getPlanConversationId: () => null,
+		getDebugMode: () => false,
+		getDebugConversationId: () => null,
+		getDebugReportWritten: () => false,
+		setDebugReportWritten: () => {},
 	};
 
 	describe("shortcut conflicts", () => {

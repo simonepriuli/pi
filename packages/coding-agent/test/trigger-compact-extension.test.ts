@@ -22,6 +22,10 @@ function createContext(tokens: number | null, compact = vi.fn()): ExtensionConte
 		getSwarmMode: () => false,
 		getPlanMode: () => false,
 		getPlanConversationId: () => null,
+		getDebugMode: () => false,
+		getDebugConversationId: () => null,
+		getDebugReportWritten: () => false,
+		setDebugReportWritten: () => {},
 	};
 }
 
