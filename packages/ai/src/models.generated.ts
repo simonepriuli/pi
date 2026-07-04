@@ -10986,13 +10986,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.08499999999999999,
-				output: 0.39999999999999997,
+				input: 0.08,
+				output: 0.44999999999999996,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 1000000,
-			maxTokens: 16384,
+			maxTokens: 4096,
 		} satisfies Model<"openai-completions">,
 		"nvidia/nemotron-3-super-120b-a12b:free": {
 			id: "nvidia/nemotron-3-super-120b-a12b:free",
@@ -12836,7 +12836,7 @@ export const MODELS = {
 			cost: {
 				input: 0.28500000000000003,
 				output: 2.4,
-				cacheRead: 0,
+				cacheRead: 0.15,
 				cacheWrite: 0,
 			},
 			contextWindow: 262144,
@@ -13361,13 +13361,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.9299999999999999,
-				output: 3,
-				cacheRead: 0.18,
+				input: 0.84,
+				output: 2.64,
+				cacheRead: 0.156,
 				cacheWrite: 0,
 			},
 			contextWindow: 1048576,
-			maxTokens: 32768,
+			maxTokens: 128000,
 		} satisfies Model<"openai-completions">,
 		"z-ai/glm-5v-turbo": {
 			id: "z-ai/glm-5v-turbo",
