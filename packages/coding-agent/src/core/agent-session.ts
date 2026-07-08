@@ -835,6 +835,36 @@ export class AgentSession {
 		return this.agent.state.messages;
 	}
 
+	/** Current context messages annotated with stable session entry IDs when available. */
+	getMessagesWithEntryIds(): Array<AgentMessage & { entryId?: string }> {
+		const messageEntries = this.sessionManager.getBranch().filter((entry) => entry.type === "message");
+		const entryIdByMessage = new Map<AgentMessage, string>();
+		for (const entry of messageEntries) {
+			if (entry.type === "message") {
+				entryIdByMessage.set(entry.message, entry.id);
+			}
+		}
+
+		let entryIndex = 0;
+		return this.agent.state.messages.map((message) => {
+			const directEntryId = entryIdByMessage.get(message);
+			if (directEntryId) return { ...message, entryId: directEntryId };
+			if (message.role === "custom") return message;
+
+			let entryId: string | undefined;
+			for (let index = entryIndex; index < messageEntries.length; index += 1) {
+				const entry = messageEntries[index];
+				if (entry?.type === "message" && entry.message.role === message.role) {
+					entryId = entry.id;
+					entryIndex = index + 1;
+					break;
+				}
+			}
+
+			return entryId ? { ...message, entryId } : message;
+		});
+	}
+
 	/** Current steering mode */
 	get steeringMode(): "all" | "one-at-a-time" {
 		return this.agent.steeringMode;

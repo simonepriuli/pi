@@ -379,6 +379,14 @@ export class RpcClient {
 	}
 
 	/**
+	 * Fork from a specific entry, preserving that entry in the new session.
+	 */
+	async forkAtEntry(entryId: string): Promise<{ cancelled: boolean }> {
+		const response = await this.send({ type: "fork_at_entry", entryId });
+		return this.getData(response);
+	}
+
+	/**
 	 * Clone the current active branch into a new session.
 	 * @returns Object with `cancelled: true` if an extension cancelled the clone
 	 */
@@ -416,6 +424,14 @@ export class RpcClient {
 	async getMessages(): Promise<AgentMessage[]> {
 		const response = await this.send({ type: "get_messages" });
 		return this.getData<{ messages: AgentMessage[] }>(response).messages;
+	}
+
+	/**
+	 * Get all messages in the session with stable session entry IDs when available.
+	 */
+	async getMessagesWithEntryIds(): Promise<Array<AgentMessage & { entryId?: string }>> {
+		const response = await this.send({ type: "get_messages_with_entry_ids" });
+		return this.getData<{ messages: Array<AgentMessage & { entryId?: string }> }>(response).messages;
 	}
 
 	/**

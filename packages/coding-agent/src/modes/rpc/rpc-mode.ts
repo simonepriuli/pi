@@ -620,6 +620,17 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 				return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
 			}
 
+			case "fork_at_entry": {
+				if (session.isStreaming) {
+					return error(id, "fork_at_entry", "Cannot fork while the agent is streaming");
+				}
+				const result = await runtimeHost.fork(command.entryId, { position: "at" });
+				if (!result.cancelled) {
+					await rebindSession();
+				}
+				return success(id, "fork_at_entry", { cancelled: result.cancelled });
+			}
+
 			case "clone": {
 				const leafId = session.sessionManager.getLeafId();
 				if (!leafId) {
@@ -657,6 +668,10 @@ export async function runRpcMode(runtimeHost: AgentSessionRuntime): Promise<neve
 
 			case "get_messages": {
 				return success(id, "get_messages", { messages: session.messages });
+			}
+
+			case "get_messages_with_entry_ids": {
+				return success(id, "get_messages_with_entry_ids", { messages: session.getMessagesWithEntryIds() });
 			}
 
 			// =================================================================
