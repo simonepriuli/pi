@@ -170,7 +170,9 @@ describe("AgentSession retry", () => {
 		expect(created.session.isRetrying).toBe(false);
 	});
 
-	it("retries provider network_error failures", async () => {
+	// OpenAI-compatible providers (e.g. OpenRouter) report mid-stream upstream failures as
+	// finish_reason "network_error" or a bare "error".
+	it.each(["network_error", "error"])("retries provider finish_reason %s failures", async (reason) => {
 		const created = createSession({ failCount: 0 });
 		let callCount = 0;
 		const streamFn = () => {
@@ -180,7 +182,7 @@ describe("AgentSession retry", () => {
 				if (callCount === 1) {
 					const msg = createAssistantMessage("", {
 						stopReason: "error",
-						errorMessage: "Provider finish_reason: network_error",
+						errorMessage: `Provider finish_reason: ${reason}`,
 					});
 					stream.push({ type: "start", partial: msg });
 					stream.push({ type: "error", reason: "error", error: msg });
