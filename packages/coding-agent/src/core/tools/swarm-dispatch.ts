@@ -5,10 +5,10 @@ import { fileURLToPath } from "node:url";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import type { ModelRegistry } from "../model-registry.ts";
+import { swarmDispatchRenderers } from "./renderers/swarm-dispatch.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
 const DEFAULT_MODEL = "kimi-k2.6";
@@ -694,10 +694,7 @@ export function createSwarmDispatchToolDefinition(
 				details: { model, concurrency, totalTasks: results.length },
 			};
 		},
-		renderCall(args, theme) {
-			const text = `swarm_dispatch ${args.tasks?.length ?? 0} tasks`;
-			return new Text(theme.fg("toolTitle", theme.bold(text)), 0, 0);
-		},
+		...swarmDispatchRenderers,
 	};
 }
 

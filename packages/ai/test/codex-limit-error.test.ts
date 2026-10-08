@@ -3,7 +3,7 @@ import {
 	formatCodexLimitError,
 	formatCodexResetDelay,
 	formatCodexStreamErrorEvent,
-} from "../src/providers/codex-limit-error.ts";
+} from "../src/api/codex-limit-error.ts";
 
 describe("codex-limit-error", () => {
 	it("formats reset delay in days for long windows", () => {

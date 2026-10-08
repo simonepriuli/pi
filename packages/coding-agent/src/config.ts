@@ -1,9 +1,11 @@
 import { accessSync, constants, existsSync, readFileSync, realpathSync } from "fs";
+import { createRequire } from "module";
 import { homedir } from "os";
 import { basename, dirname, join, resolve, sep, win32 } from "path";
 import { fileURLToPath } from "url";
 import { spawnProcessSync } from "./utils/child-process.ts";
 import { normalizePath } from "./utils/paths.ts";
+import { stripBom } from "./utils/text.ts";
 
 // =============================================================================
 // Package Detection
@@ -22,6 +24,10 @@ export const isBunBinary =
 /** Detect if Bun is the runtime (compiled binary or bun run) */
 export const isBunRuntime = !!process.versions.bun;
 
+/** Detect the esbuild-bundled Node.js distribution. */
+declare const PI_BUNDLED_NODE: boolean;
+export const isBundledNode = typeof PI_BUNDLED_NODE !== "undefined" && PI_BUNDLED_NODE;
+
 // =============================================================================
 // Install Method Detection
 // =============================================================================
@@ -36,6 +42,18 @@ interface SelfUpdateCommandStep {
 
 export interface SelfUpdateCommand extends SelfUpdateCommandStep {
 	steps?: SelfUpdateCommandStep[];
+}
+
+export type SelfUpdatePackageTarget = string | { packageName: string; installSpec?: string };
+
+function normalizeSelfUpdatePackageTarget(target: SelfUpdatePackageTarget): {
+	packageName: string;
+	installSpec: string;
+} {
+	if (typeof target === "string") {
+		return { packageName: target, installSpec: target };
+	}
+	return { packageName: target.packageName, installSpec: target.installSpec ?? target.packageName };
 }
 
 function makeSelfUpdateCommand(
@@ -103,29 +121,38 @@ function getInferredNpmInstall(): { root: string; prefix: string } | undefined {
 function getSelfUpdateCommandForMethod(
 	method: InstallMethod,
 	installedPackageName: string,
-	updatePackageName = installedPackageName,
+	updatePackageTarget: SelfUpdatePackageTarget = installedPackageName,
 	npmCommand?: string[],
 ): SelfUpdateCommand | undefined {
+	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
 	switch (method) {
 		case "bun-binary":
 			return undefined;
-		case "pnpm":
+		case "pnpm": {
+			const match = readCommandOutput("pnpm", ["root", "-g"])
+				? undefined
+				: /^(.*[\\/]global[\\/][^\\/]+)[\\/]\.pnpm[\\/]/.exec(getPackageDir());
+			const binDirArgs = match
+				? [`--config.global-bin-dir=${process.env.PNPM_HOME || dirname(dirname(match[1]))}`]
+				: [];
 			return makeSelfUpdateCommand(
 				makeSelfUpdateCommandStep("pnpm", [
 					"install",
 					"-g",
 					"--ignore-scripts",
 					"--config.minimumReleaseAge=0",
-					updatePackageName,
+					...binDirArgs,
+					target.installSpec,
 				]),
-				updatePackageName === installedPackageName
+				target.packageName === installedPackageName
 					? undefined
-					: makeSelfUpdateCommandStep("pnpm", ["remove", "-g", installedPackageName]),
+					: makeSelfUpdateCommandStep("pnpm", ["remove", "-g", ...binDirArgs, installedPackageName]),
 			);
+		}
 		case "yarn":
 			return makeSelfUpdateCommand(
-				makeSelfUpdateCommandStep("yarn", ["global", "add", "--ignore-scripts", updatePackageName]),
-				updatePackageName === installedPackageName
+				makeSelfUpdateCommandStep("yarn", ["global", "add", "--ignore-scripts", target.installSpec]),
+				target.packageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep("yarn", ["global", "remove", installedPackageName]),
 			);
@@ -136,9 +163,9 @@ function getSelfUpdateCommandForMethod(
 					"-g",
 					"--ignore-scripts",
 					"--minimum-release-age=0",
-					updatePackageName,
+					target.installSpec,
 				]),
-				updatePackageName === installedPackageName
+				target.packageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep("bun", ["uninstall", "-g", installedPackageName]),
 			);
@@ -146,16 +173,19 @@ function getSelfUpdateCommandForMethod(
 			const [command = "npm", ...npmArgs] = npmCommand ?? [];
 			const inferred = npmCommand?.length ? undefined : getInferredNpmInstall();
 			const prefixArgs = [...npmArgs, ...(inferred ? ["--prefix", inferred.prefix] : [])];
+			// pi.dev advertises releases immediately, so a configured npm age gate would
+			// block the update. npm has no per-package age gate, so this also lets new
+			// transitive dependency releases through. Managed installs avoid this.
 			const installStep = makeSelfUpdateCommandStep(command, [
 				...prefixArgs,
 				"install",
 				"-g",
 				"--ignore-scripts",
 				"--min-release-age=0",
-				updatePackageName,
+				target.installSpec,
 			]);
 			const uninstallStep =
-				updatePackageName === installedPackageName
+				target.packageName === installedPackageName
 					? undefined
 					: makeSelfUpdateCommandStep(command, [...prefixArgs, "uninstall", "-g", installedPackageName]);
 			return makeSelfUpdateCommand(installStep, uninstallStep);
@@ -205,7 +235,9 @@ function getGlobalPackageRoots(method: InstallMethod, _packageName: string, npmC
 		}
 		case "pnpm": {
 			const root = readCommandOutput("pnpm", ["root", "-g"]);
-			return root ? [root, dirname(root)] : [];
+			if (root) return [root, dirname(root)];
+			const match = /^(.*[\\/]global[\\/][^\\/]+)[\\/]\.pnpm[\\/]/.exec(getPackageDir());
+			return match ? [match[1]] : [];
 		}
 		case "yarn": {
 			const dir = readCommandOutput("yarn", ["global", "dir"]);
@@ -292,10 +324,10 @@ function isManagedByGlobalPackageManager(method: InstallMethod, packageName: str
 export function getSelfUpdateCommand(
 	packageName: string,
 	npmCommand?: string[],
-	updatePackageName = packageName,
+	updatePackageTarget: SelfUpdatePackageTarget = packageName,
 ): SelfUpdateCommand | undefined {
 	const method = detectInstallMethod();
-	const command = getSelfUpdateCommandForMethod(method, packageName, updatePackageName, npmCommand);
+	const command = getSelfUpdateCommandForMethod(method, packageName, updatePackageTarget, npmCommand);
 	if (!command || !isManagedByGlobalPackageManager(method, packageName, npmCommand) || !isSelfUpdatePathWritable()) {
 		return undefined;
 	}
@@ -305,20 +337,21 @@ export function getSelfUpdateCommand(
 export function getSelfUpdateUnavailableInstruction(
 	packageName: string,
 	npmCommand?: string[],
-	updatePackageName = packageName,
+	updatePackageTarget: SelfUpdatePackageTarget = packageName,
 ): string {
 	const method = detectInstallMethod();
+	const target = normalizeSelfUpdatePackageTarget(updatePackageTarget);
 	if (method === "bun-binary") {
-		return `Download from: https://github.com/earendil-works/pi-mono/releases/latest`;
+		return `Download from: https://github.com/earendil-works/pi/releases/latest`;
 	}
-	const command = getSelfUpdateCommandForMethod(method, packageName, updatePackageName, npmCommand);
+	const command = getSelfUpdateCommandForMethod(method, packageName, target, npmCommand);
 	if (command) {
 		if (isManagedByGlobalPackageManager(method, packageName, npmCommand) && !isSelfUpdatePathWritable()) {
 			return `This installation is managed by a global ${method} install, but the install path is not writable. Update it yourself with: ${command.display}`;
 		}
 		return `This installation is not managed by a global ${method} install. Update it with the package manager, wrapper, or source checkout that provides it.`;
 	}
-	return `Update ${updatePackageName} using the package manager, wrapper, or source checkout that provides this installation.`;
+	return `Update ${target.installSpec} using the package manager, wrapper, or source checkout that provides this installation.`;
 }
 
 export function getUpdateInstruction(packageName: string): string {
@@ -337,9 +370,26 @@ export function getUpdateInstruction(packageName: string): string {
 /**
  * Get the base directory for resolving package assets (themes, package.json, README.md, CHANGELOG.md).
  * - For Bun binary: returns the directory containing the executable
- * - For Node.js (dist/): returns __dirname (the dist/ directory)
- * - For tsx (src/): returns parent directory (the package root)
+ * - For Node.js: returns the package root containing package.json
+ * - Ignores Bun binary metadata copied into dist/ when the package root is available
  */
+export function findNodePackageDir(startDir: string): string {
+	let dir = startDir;
+	while (dir !== dirname(dir)) {
+		if (existsSync(join(dir, "package.json"))) {
+			const parent = dirname(dir);
+			// build:binary places Bun's metadata inside dist/. Node still needs the
+			// package root so its dist-relative asset paths do not become dist/dist/.
+			if (basename(dir) === "dist" && existsSync(join(parent, "package.json"))) {
+				return parent;
+			}
+			return dir;
+		}
+		dir = dirname(dir);
+	}
+	return startDir;
+}
+
 export function getPackageDir(): string {
 	// Allow override via environment variable (useful for Nix/Guix where store paths tokenize poorly)
 	const envDir = process.env.PI_PACKAGE_DIR;
@@ -351,23 +401,14 @@ export function getPackageDir(): string {
 		// Bun binary: process.execPath points to the compiled executable
 		return dirname(process.execPath);
 	}
-	// Node.js: walk up from __dirname until we find package.json
-	let dir = __dirname;
-	while (dir !== dirname(dir)) {
-		if (existsSync(join(dir, "package.json"))) {
-			return dir;
-		}
-		dir = dirname(dir);
-	}
-	// Fallback (shouldn't happen)
-	return __dirname;
+	return findNodePackageDir(__dirname);
 }
 
 /**
  * Get path to built-in themes directory (shipped with package)
  * - For Bun binary: theme/ next to executable
  * - For Node.js (dist/): dist/modes/interactive/theme/
- * - For tsx (src/): src/modes/interactive/theme/
+ * - For source (src/): src/modes/interactive/theme/
  */
 export function getThemesDir(): string {
 	if (isBunBinary) {
@@ -383,7 +424,7 @@ export function getThemesDir(): string {
  * Get path to HTML export template directory (shipped with package)
  * - For Bun binary: export-html/ next to executable
  * - For Node.js (dist/): dist/core/export-html/
- * - For tsx (src/): src/core/export-html/
+ * - For source (src/): src/core/export-html/
  */
 export function getExportTemplateDir(): string {
 	if (isBunBinary) {
@@ -423,7 +464,7 @@ export function getChangelogPath(): string {
  * Get path to built-in interactive assets directory.
  * - For Bun binary: assets/ next to executable
  * - For Node.js (dist/): dist/modes/interactive/assets/
- * - For tsx (src/): src/modes/interactive/assets/
+ * - For source (src/): src/modes/interactive/assets/
  */
 export function getInteractiveAssetsDir(): string {
 	if (isBunBinary) {
@@ -439,6 +480,75 @@ export function getBundledInteractiveAssetPath(name: string): string {
 	return join(getInteractiveAssetsDir(), name);
 }
 
+let quickJSWasmPath: string | undefined;
+
+/** Called by the Bun entry with the path of the QuickJS wasm file embedded in the compiled executable. */
+export function setEmbeddedQuickJSWasmPath(path: string): void {
+	quickJSWasmPath = path;
+}
+
+/**
+ * Get path to `quickjs-wasi/quickjs.wasm`, the VM that runs codemode scripts. Resolved once so the
+ * compiled module cached per path keeps working after an update removes this install (#10439).
+ */
+export function getQuickJSWasmPath(): string {
+	quickJSWasmPath ??= createRequire(import.meta.url).resolve("quickjs-wasi/quickjs.wasm");
+	return quickJSWasmPath;
+}
+
+/** Resolve the codemode worker entry for a release runtime. */
+export function resolveCodemodeWorkerSpecifier(
+	runtime: "bun-binary" | "bundled-node" | "unbundled",
+	moduleUrl: string,
+): string | URL | undefined {
+	// Bun embeds explicit source entrypoints, but on Windows Bun 1.3 cannot map an absolute
+	// B:\~BUN URL back to one. A relative string with the original source extension works on
+	// every Bun platform.
+	if (runtime === "bun-binary") return "./src/extensions/codemode/worker.ts";
+	if (runtime === "bundled-node") return new URL("./codemode-worker.js", moduleUrl);
+	return undefined;
+}
+
+let codemodeWorkerDataUrl: URL | undefined;
+
+/**
+ * Get the codemode worker entry, or undefined to use the worker that ships next to pi-codemode.
+ * The Bun and Node release builds both pass the worker as an extra entrypoint.
+ */
+export function getCodemodeWorkerSpecifier(): string | URL | undefined {
+	const runtime = isBunBinary ? "bun-binary" : isBundledNode ? "bundled-node" : "unbundled";
+	const specifier = resolveCodemodeWorkerSpecifier(runtime, import.meta.url);
+	if (runtime !== "bundled-node" || !(specifier instanceof URL)) return specifier;
+	// Spawn workers from an in-memory copy. An update replaces or deletes the file while this
+	// process keeps running (#10439). The bundle build keeps the worker free of relative imports
+	// and import.meta, so it runs from a data: URL.
+	codemodeWorkerDataUrl ??= new URL(`data:text/javascript;base64,${readFileSync(specifier).toString("base64")}`);
+	return codemodeWorkerDataUrl;
+}
+
+export type InstallChange = { kind: "updated"; version: string } | { kind: "removed" };
+
+/**
+ * Detect that the package this process runs from changed on disk, for example after `pi update`
+ * in another terminal. Code loaded on demand can then be missing or from another version.
+ *
+ * Checks the package.json read at startup. Resolving it again would walk up past a deleted install
+ * and could find an unrelated package.json, such as one in the home directory.
+ */
+export function detectInstallChange(packageJsonPath = startupPackageJsonPath): InstallChange | undefined {
+	// The Bun binary embeds its code, so replacing the executable does not affect this process.
+	if (isBunBinary || !packageJsonPath) return undefined;
+	let installed: PackageJson;
+	try {
+		installed = JSON.parse(stripBom(readFileSync(packageJsonPath, "utf-8"))) as PackageJson;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "ENOENT" ? { kind: "removed" } : undefined;
+	}
+	return installed.version && installed.version !== VERSION
+		? { kind: "updated", version: installed.version }
+		: undefined;
+}
+
 // =============================================================================
 // App Config (from package.json piConfig)
 // =============================================================================
@@ -452,7 +562,17 @@ interface PackageJson {
 	};
 }
 
-const pkg = JSON.parse(readFileSync(getPackageJsonPath(), "utf-8")) as PackageJson;
+let pkg: PackageJson = {};
+/** The package.json this process started from, if one existed. */
+let startupPackageJsonPath: string | undefined;
+try {
+	const packageJsonPath = getPackageJsonPath();
+	pkg = JSON.parse(stripBom(readFileSync(packageJsonPath, "utf-8"))) as PackageJson;
+	startupPackageJsonPath = packageJsonPath;
+} catch (e: unknown) {
+	const err = e as NodeJS.ErrnoException;
+	if (err.code !== "ENOENT") throw e;
+}
 
 const piConfigName: string | undefined = pkg.piConfig?.name;
 export const PACKAGE_NAME: string = pkg.name || "@earendil-works/pi-coding-agent";
@@ -471,7 +591,7 @@ export function expandTildePath(path: string): string {
 
 const DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/";
 
-/** Get the share viewer URL for a gist ID */
+/** Get the share viewer URL for a gist ID. */
 export function getShareViewerUrl(gistId: string): string {
 	const baseUrl = process.env.PI_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
 	return `${baseUrl}#${gistId}`;

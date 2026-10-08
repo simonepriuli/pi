@@ -1,4 +1,4 @@
-import { getModel } from "@earendil-works/pi-ai";
+import { getModel } from "@earendil-works/pi-ai/compat";
 import { describe, expect, it } from "vitest";
 import {
 	buildSwarmWorkerThinkingArgs,
@@ -10,7 +10,7 @@ import {
 
 describe("swarm worker thinking args", () => {
 	it("forces a thinking level for reasoning models so OpenRouter does not get effort none", () => {
-		const model = getModel("openrouter", "openai/gpt-oss-120b:free");
+		const model = getModel("openrouter", "openai/gpt-oss-120b");
 		expect(buildSwarmWorkerThinkingArgs(model)).toEqual(["--thinking", "low"]);
 	});
 

@@ -1,5 +1,7 @@
-import { Box, Container, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { Container, Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
+import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { createMarkdownTransform } from "./markdown-transform.ts";
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -9,24 +11,51 @@ const OSC133_ZONE_FINAL = "\x1b]133;C\x07";
  * Component that renders a user message
  */
 export class UserMessageComponent extends Container {
-	private contentBox: Box;
+	private text: string;
+	private markdownTheme: MarkdownTheme;
+	private outputPad: number;
+	private markdownTransformers: readonly MarkdownTransformer[];
 
-	constructor(text: string, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
+	constructor(
+		text: string,
+		markdownTheme: MarkdownTheme = getMarkdownTheme(),
+		outputPad = 1,
+		markdownTransformers: readonly MarkdownTransformer[] = [],
+	) {
 		super();
-		this.contentBox = new Box(1, 1, (content: string) => theme.bg("userMessageBg", content));
-		this.contentBox.addChild(
+		this.text = text;
+		this.markdownTheme = markdownTheme;
+		this.outputPad = outputPad;
+		this.markdownTransformers = markdownTransformers;
+		this.rebuild();
+	}
+
+	setOutputPad(padding: number): void {
+		this.outputPad = padding;
+		this.rebuild();
+	}
+
+	private rebuild(): void {
+		this.clear();
+		// The Markdown pads and colors its own background: a Box around it would keep a second full-width copy of every
+		// line, with identical output.
+		this.addChild(
 			new Markdown(
-				text,
-				0,
-				0,
-				markdownTheme,
+				this.text,
+				this.outputPad,
+				1,
+				this.markdownTheme,
 				{
 					color: (content: string) => theme.fg("userMessageText", content),
+					bgColor: (content: string) => theme.bg("userMessageBg", content),
 				},
-				{ preserveOrderedListMarkers: true },
+				{
+					preserveOrderedListMarkers: true,
+					preserveBackslashEscapes: true,
+					transform: createMarkdownTransform("user", false, this.markdownTransformers),
+				},
 			),
 		);
-		this.addChild(this.contentBox);
 	}
 
 	override render(width: number): string[] {
